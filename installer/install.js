@@ -519,7 +519,7 @@ async function installClaude(ctx) {
   results.detected++;
   say('→ Claude Code detected');
 
-  // Plugin install (idempotent unless --force)
+  // Plugin install/update (reinstall from the marketplace only with --force)
   let alreadyInstalled = false;
   if (!opts.force) {
     const r = captureSpawn('claude', ['plugin', 'list']);
@@ -527,9 +527,17 @@ async function installClaude(ctx) {
   }
   let pluginInstallSucceeded = false;
   if (alreadyInstalled) {
-    note('  caveman plugin already installed (use --force to reinstall)');
-    results.skipped.push(['claude', 'plugin already installed']);
-    pluginInstallSucceeded = true;
+    const pluginEnv = sameFilesystemTmpEnv(configDir);
+    const update = runSpawn('claude', ['plugin', 'update', 'caveman@caveman'], { env: pluginEnv }, opts.dryRun);
+    if (spawnOk(update)) {
+      results.installed.push('claude');
+      pluginInstallSucceeded = true;
+    } else {
+      if (update.error) {
+        warn('  claude CLI not found on PATH (or could not be spawned)');
+      }
+      results.failed.push(['claude', 'claude plugin update failed']);
+    }
   } else {
     // Use a temp dir on the same filesystem as configDir to avoid EXDEV errors
     // when Claude Code's plugin installer tries to rename across filesystems (#585).
